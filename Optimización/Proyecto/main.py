@@ -1,21 +1,19 @@
 from gurobipy import Model, GRB, quicksum
 import pandas as pd
-
 import csv
 
-# MANEJO DE DATOS ------------ RELLENAR
-# -------
+# ------- MANEJO DE DATOS ------------
 recursos = pd.read_csv('results/recursos.csv', sep=';')
 detalle_vivienda = pd.read_csv('results/detallesvivienda.csv', sep=';')
 preferencias = pd.read_csv('results/preferencias.csv', sep=';')
 tiempos_viviendas = pd.read_csv('results/tiemposviviendas.csv', sep=';')
 # PARAMETROS para construcción conjunto:
 
-cant_familias = 4
-t_max = 90
+cant_familias = 100
+t_max = 365
 
 # CONJUNTOS
-N = [i for i in range(cant_familias)] # familias para asignar [0, cant_familias)
+N = [i for i in range(1, cant_familias + 1)] # familias para asignar [0, cant_familias)
 J = [1, 2, 3, 4] # Tipos de viviendas
 T = [(t+1) for t in range(t_max)] # Horizonte de tiempo [1, t_max]
 
@@ -30,8 +28,7 @@ v = {row['Vivienda']: row['Recursos'] for index, row in detalle_vivienda.iterrow
 c = {row['Vivienda']: row['Costos'] for index, row in detalle_vivienda.iterrows()}
 
 # Q_ij: tiempo de construccion e instalacion de j 
-Q = 1 # IMPORTAR EN MODEL FINAL. por ahora duracion siempre de un día
-q = {}
+q = dict()
 for index, row in tiempos_viviendas.iterrows():
     for j in range(1, 5):  # Vivienda 1 a 4
         q[(row['Familia'], j)] = row[f'Vivienda{j}']
@@ -48,12 +45,12 @@ for index, row in preferencias.iterrows():
     z[(i, 4)] = int(row['Vivienda4'])
           
 # m_j: cantidad inicial de viviendas tipo j disponibles
-m = {j: 300 for j in range(1, 5)}
+m = {j: 50 for j in range(1, 5)}
 
 # - Independientes de conjuntos
-S = 100 # S: cantidad maxima de instalaciones simultaneas
-P = 1000 # P: presupuesto total disponible
-M = t_max*10 # numero grande auxiliar en restriccion para definir R
+S = 200 # S: cantidad maxima de instalaciones simultaneas
+P = 100000000000 # P: presupuesto total disponible
+M = t_max*1000 # numero grande auxiliar en restriccion para definir R
 
 model = Model() # Generar el modelo
 
@@ -65,7 +62,7 @@ y = model.addVars(N, J, T, vtype = GRB.BINARY, name="y") # instalación de j par
 # - enteras (inventario(I), cant de viviendas encargadas(u) y días totales(R) son valores enteros)
 I = model.addVars(J, T, vtype = GRB.INTEGER, name="I") # inventario de viviendas disponibles tipo j al final de t
 u = model.addVars(J, T, vtype = GRB.INTEGER, name="u") # viviendas tipo j que se mandan a construir en t
-R = model.addVar(vtype = GRB.INTEGER, name="R") # Tiempo total para entregar viviendas a todos
+R = model.addVar(vtype = GRB.INTEGER, name="R") # Tiempo total para entregar vivienda a cada familia
 
 model.update() # actualizar modelo
 
@@ -78,15 +75,14 @@ model.addConstrs( (quicksum(x[i, j, t] for t in T for j in J) == 1 for i in N), 
 # (x_ijt 1 solo si z_ij es 1(cuando a familia i le sirve vivienda j))
 model.addConstrs( ( z[(i, j)] >= quicksum(x[i, j, t] for t in T) for i in N for j in J), name="R2") 
 
-# Instalacion comienza día que se asigna vivienda a familia y continua sin interrumpcion
-# for in range no incluye el limite mayor en el dominio (por eso rangos distintos a modelo en informe)
-# model.addConstrs( ( (x[i, j, t] <= y[i, j, a] for i in I for j in J for a in range(t, t + Q - 1)) for t in range(1, len(T) - Q) ), name="R3") 
-# model.addConstrs( ( (x[i, j, t] <= y[i, j, a] for i in I for j in J for t in range(1, t_max-q[i, j]+1)) for a in range(t, t+Q)), name="R3") 
+# Tiempo maximo de instalación de una vivienda y que no debe existir instalación si vivienda no ha sido asignada
+model.addConstrs( ( quicksum(y[i, j, t] for t in T) == (quicksum(x[i, j, t] for t in T) * q[(i, j)]) for i in N for j in J), name="R2.1")
 
+# Instalacion comienza día que se asigna vivienda a familia y continua sin interrupción
+model.addConstrs( ( x[i, j, t] <= y[i, j, t_p] for t in range(1, T[-1]- q[(i,j)]) for i in N for j in J for t_p in range(t, t+q[(i, j)]-1) if t_p < 366), name="R3")
 
-#Asegurarse de no sobrepasar el limite de instalaciones diarias:
-# model.addConstrs((quicksum(y[i, j, t] for i in range(n) for j in range(4)) <= S for t in range(T)), name="R4")
-# model.addConstrs((quicksum(y[i, j, t] for i in range(n) for j in range(4)) <= S for t in range(T)), name="R4")
+# Asegurarse de no sobrepasar el limite de instalaciones diarias:
+model.addConstrs((quicksum(y[i, j, t] for i in N for j in J) <= S for t in T), name="R4")
 
 #Inventario inicial de viviendas por tipo:
 model.addConstrs( ( I[j, 1] == m[j] + u[j, 1] - quicksum(x[i, j, 1] for i in N) for j in J), "R5")
@@ -104,7 +100,12 @@ model.addConstrs( (quicksum(v[j]*u[j, t] for j in J) <= r[t] for t in T), "R8" )
 model.addConstr((quicksum(quicksum(c[j]*u[j, t] for j in J) for t in T) <= P), "R9" )
 
 #Definicion de R(tiempo total) mayor o igual a ultimo día de última instalación
-model.addConstrs( (R >= t - M*(1- y[i, j, t]) for i in N for j in J for t in T), name="RFinal") 
+model.addConstrs( (R >= t - M*(1- y[i, j, t]) for i in N for j in J for t in T), name="RFinal")
+model.addConstrs( (R >= t - M*(1- x[i, j, t]) for i in N for j in J for t in T), name="RFinal2") 
+
+# Definicón de no negatividad para inventario y producción de viviendas
+model.addConstrs( (I[j, t] >= 0 for j in J for t in T), "RN1")
+model.addConstrs( (u[j, t] >= 0 for j in J for t in T), "RN2")
 
 # FUNCION OBJETIVO
 objetivo = R
@@ -129,12 +130,12 @@ for i in N:
 
 print("vivenda y cantidad mandada a hacer cada día") # para primeros 10 dias
 titulo = "| tipo_vivienda" # 15 caracteres
-for t in range(1, 10): # for t in T para incluir todos
+for t in T: # for t in T para incluir todos
     titulo += f" |  {t} "
 print(titulo)
 for j in J:
     texto = f"|       {j}       |"
-    for t in range(1, 10):
+    for t in T:
         texto += f" {quicksum(x[i, j, t].x for i in N)} |"
     print(texto)
 ### IDEA FUNCIONA: HACER EN EXCEL
