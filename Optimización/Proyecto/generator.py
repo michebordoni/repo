@@ -1,5 +1,4 @@
 from random import randint, shuffle
-import sys
 import os
 
 # Generador de preferencias
