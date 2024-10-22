@@ -1,4 +1,5 @@
 from random import randint, shuffle
+import sys
 import os
 
 # Generador de preferencias
@@ -24,13 +25,13 @@ with open(folder_name+"/preferencias.csv", "w") as pf:
 # Generador de tiempos entre viviendas y familias
 tiempos = []
 viv1 = 14
-viv2 = 10
-viv3 = 23
-viv4 = 14
+viv2 = 28
+viv3 = 49
+viv4 = 63
 var_viv1 = 3
-var_viv2 = 3
-var_viv3 = 5
-var_viv4 = 3
+var_viv2 = 7
+var_viv3 = 7
+var_viv4 = 7
 
 for t in range(4000):
     test = str(t + 1)
@@ -76,7 +77,7 @@ with open(folder_name+"/recursos.csv", "w") as rs:
 # Recursos para las viviendas en el formato [vivienda1, vivienda2, vivienda3, vivienda4]
 rec_viv = [14, 16, 20, 10]
 # Costos para las viviendas en el formato [vivienda1, vivienda2, vivienda3, vivienda4]
-cost_viv = [500, 1000, 780, 800]
+cost_viv = [22500, 1000, 22500, 40000]
 
 info = []
 for t in range(4):
