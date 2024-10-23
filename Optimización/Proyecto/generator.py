@@ -77,7 +77,7 @@ with open(folder_name+"/recursos.csv", "w") as rs:
 # Recursos para las viviendas en el formato [vivienda1, vivienda2, vivienda3, vivienda4]
 rec_viv = [14, 16, 20, 10]
 # Costos para las viviendas en el formato [vivienda1, vivienda2, vivienda3, vivienda4]
-cost_viv = [22500, 1000, 22500, 40000]
+cost_viv = [3800, 4550, 22500, 40000]
 
 info = []
 for t in range(4):

@@ -9,7 +9,7 @@ preferencias = pd.read_csv('results/preferencias.csv', sep=';')
 tiempos_viviendas = pd.read_csv('results/tiemposviviendas.csv', sep=';')
 # PARAMETROS para construcción conjunto:
 
-cant_familias = 25
+cant_familias = 50
 t_max = 365
 
 # CONJUNTOS
@@ -45,11 +45,11 @@ for index, row in preferencias.iterrows():
     z[(i, 4)] = int(row['Vivienda4'])
           
 # m_j: cantidad inicial de viviendas tipo j disponibles
-m = {j: 50 for j in range(1, 5)}
+m = {j: 12 if j == 1 else 0 for j in range(1, 5)}
 
 # - Independientes de conjuntos
-S = 200 # S: cantidad maxima de instalaciones simultaneas
-P = 100000000000 # P: presupuesto total disponible
+S = 20 # S: cantidad maxima de instalaciones simultaneas
+P = 326100000 # P: presupuesto total disponible
 M = t_max * 1000 # numero grande auxiliar en restriccion para definir R
 
 model = Model() # Generar el modelo
