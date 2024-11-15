@@ -1,15 +1,16 @@
 from gurobipy import Model, GRB, quicksum
 import pandas as pd
+from pandas import ExcelWriter
 import csv
 
 # ------- MANEJO DE DATOS ------------
-recursos = pd.read_csv('results/recursos.csv', sep=';')
-detalle_vivienda = pd.read_csv('results/detallesvivienda.csv', sep=';')
-preferencias = pd.read_csv('results/preferencias.csv', sep=';')
-tiempos_viviendas = pd.read_csv('results/tiemposviviendas.csv', sep=';')
+recursos = pd.read_csv('data/recursos.csv', sep=';')
+detalle_vivienda = pd.read_csv('data/detallesvivienda.csv', sep=';')
+preferencias = pd.read_csv('data/preferencias.csv', sep=';')
+tiempos_viviendas = pd.read_csv('data/tiemposviviendas.csv', sep=';')
 # PARAMETROS para construcción conjunto:
 
-cant_familias = 50
+cant_familias = 20
 t_max = 365
 
 # CONJUNTOS
@@ -48,7 +49,7 @@ for index, row in preferencias.iterrows():
 m = {j: 12 if j == 1 else 0 for j in range(1, 5)}
 
 # - Independientes de conjuntos
-S = 20 # S: cantidad maxima de instalaciones simultaneas
+S = round(770 * (cant_familias / 1200)) # S: cantidad maxima de instalaciones simultaneas
 P = 326100000 # P: presupuesto total disponible
 M = t_max * 1000 # numero grande auxiliar en restriccion para definir R
 
@@ -114,77 +115,132 @@ objetivo = R
 model.setObjective(objetivo, GRB.MINIMIZE)
 model.optimize()
 
-# MANEJO SOLUCIONES
-print("\n"+"-"*20+" RESULTADOS "+"-"*20)
-print(f"Valor objetivo: {model.ObjVal}")
+print("Formato de solución:")
+print("¿Cómo quiere ver la solución?")
+print("[1] Solamente mediante consola")
+print("[2] Solamente mediante excel")
+print("[3] Mediante consola y excel")
 
-print("Detalles de la solución:")
-print("-"*50)
-no_activity_start = -1
-no_activity_final = -1
-for t in T:
-    tr1 = 0
-    tr2 = 0
-    transacciones = [u[1,t].x, u[2,t].x, u[3,t].x, u[4,t].x]
-    familias = []
-    for j in J:
-        for i in N:
-            if x[i, j, t].x > 0:
-                familias.append([i, j])
-            if x[i, j, t].x > 0:
-                tr1 += 1
-            if y[i, j, t].x > 0:
-                tr2 += 1
-    tr1 += sum(transacciones)
-    if tr1 + tr2 == 0:
-        break
-    elif tr1 == 0 and tr2 > 0:
-        if no_activity_start == -1:
-            no_activity_start = t
-        elif no_activity_start != -1:
-            no_activity_final = t
-    else:
-        if no_activity_final != -1:
+# method = int(sys.argv[0])
+method = input()
+
+while method not in ["1", "2", "3"]:
+    print("Por favor, escoja una opción válida")
+    method = input()
+
+if int(method) in [1, 3]:
+
+    # MANEJO SOLUCIONES
+    print("\n"+"-"*20+" RESULTADOS "+"-"*20)
+    print(f"Valor objetivo: {model.ObjVal}")
+    print(f"GAP: {model.MIPGap}")
+    print(f"tiempo solución: {model.Runtime} segundos")
+
+    print("Detalles de la solución:")
+    print("-"*50)
+    no_activity_start = -1
+    no_activity_final = -1
+    for t in T:
+        tr1 = 0
+        tr2 = 0
+        transacciones = [u[1,t].x, u[2,t].x, u[3,t].x, u[4,t].x]
+        familias = []
+        for j in J:
+            for i in N:
+                if x[i, j, t].x > 0:
+                    familias.append([i, j])
+                if x[i, j, t].x > 0:
+                    tr1 += 1
+                if y[i, j, t].x > 0:
+                    tr2 += 1
+        tr1 += sum(transacciones)
+        if tr1 + tr2 == 0:
+            no_activity_final = t - 1
             print(f"Días {no_activity_start} - {no_activity_final} sin nueva información, solo construcciones")
-            no_activity_start = -1
-            no_activity_final = -1
-            print("-"*50)
-        elif no_activity_start != -1:
-            print(f"Día {no_activity_start} sin nueva información, solo construcciones")
-            no_activity_start = -1
-            no_activity_final = -1
-            print("-"*50)
-        if tr1 > 0:
-            print(f"Día {t}")
-            print("\tViviendas transadas por tipo:")
-            if u[1,t].x > 0:
-                print(f"\t\tVivienda 1: {u[1,t].x}")
-            if u[2,t].x > 0:
-                print(f"\t\tVivienda 2: {u[2,t].x}")
-            if u[3,t].x > 0:
-                print(f"\t\tVivienda 3: {u[3,t].x}")
-            if u[4,t].x > 0:
-                print(f"\t\tVivienda 4: {u[4,t].x}")
-            if u[1,t].x + u[2,t].x + u[3,t].x + u[4,t].x <= 0:
-                print(f"\t\tNo se compran viviendas en el día {t}")
-            print("\tInventario de viviendas por tipo:")
-            if I[1,t].x > 0:
-                print(f"\t\tVivienda 1: {I[1,t].x}")
-            if I[2,t].x > 0:
-                print(f"\t\tVivienda 2: {I[2,t].x}")
-            if I[3,t].x > 0:
-                print(f"\t\tVivienda 3: {I[3,t].x}")
-            if I[4,t].x > 0:
-                print(f"\t\tVivienda 4: {I[4,t].x}")
-            print(f"\tInfo familias:")
-            for info in familias:
-                print(f"\t\tFamilia {info[0]} es asignada vivienda {info[1]}")
-            if len(familias) == 0:
-                print("\tSe están realizando construcciones, sin información nueva que reportar")
-            print("-"*50)
-print("\n")
-print("-"*50)
-print("El resto de días no hay actividad, todas las familias tienen vivienda")
+            break
+        elif tr1 == 0 and tr2 > 0:
+            if no_activity_start == -1:
+                no_activity_start = t
+            elif no_activity_start != -1:
+                no_activity_final = t
+        else:
+            if no_activity_final != -1:
+                print(f"Días {no_activity_start} - {no_activity_final} sin nueva información, solo construcciones")
+                no_activity_start = -1
+                no_activity_final = -1
+                print("-"*50)
+            elif no_activity_start != -1:
+                print(f"Día {no_activity_start} sin nueva información, solo construcciones")
+                no_activity_start = -1
+                no_activity_final = -1
+                print("-"*50)
+            if tr1 > 0:
+                print(f"Día {t}")
+                print("\tViviendas transadas por tipo:")
+                if u[1,t].x > 0:
+                    print(f"\t\tVivienda 1: {u[1,t].x}")
+                if u[2,t].x > 0:
+                    print(f"\t\tVivienda 2: {u[2,t].x}")
+                if u[3,t].x > 0:
+                    print(f"\t\tVivienda 3: {u[3,t].x}")
+                if u[4,t].x > 0:
+                    print(f"\t\tVivienda 4: {u[4,t].x}")
+                if u[1,t].x + u[2,t].x + u[3,t].x + u[4,t].x <= 0:
+                    print(f"\t\tNo se compran viviendas en el día {t}")
+                print("\tInventario de viviendas por tipo:")
+                if I[1,t].x > 0:
+                    print(f"\t\tVivienda 1: {I[1,t].x}")
+                if I[2,t].x > 0:
+                    print(f"\t\tVivienda 2: {I[2,t].x}")
+                if I[3,t].x > 0:
+                    print(f"\t\tVivienda 3: {I[3,t].x}")
+                if I[4,t].x > 0:
+                    print(f"\t\tVivienda 4: {I[4,t].x}")
+                print(f"\tInfo familias:")
+                for info in familias:
+                    print(f"\t\tFamilia {info[0]} es asignada vivienda {info[1]}")
+                if len(familias) == 0:
+                    print("\tSe están realizando construcciones, sin información nueva que reportar")
+                print("-"*50)
+    print("\n")
+    print("-"*50)
+    print("El resto de días no hay actividad, todas las familias tienen vivienda")
+
+if int(method) in [2, 3]:
+    # GUARDAR SOLUCIONES (Tablas excel en carpeta solucion)
+    # Asignaciones:Analisis por familia(tabla con familia como indice e informacion sobre su asignacion)
+    asignaciones = [] # lista de listas(cada una es una fila del excel)
+    columnas_tabla_asignaciones = ["Familia", "Tipo Vivienda", "día asignacion", "día final instalacion"]
+    for i in N:
+        for j in J:
+            for t in T: 
+                if (x[i,j,t].x > 0): # se imprime día de asignacion (valor de x mayor a 0 )
+                    t_final_install = t + q[(i, j)] - 1 # dia final de instalacion
+                    fila = [i, j, t, t_final_install]
+                    asignaciones.append(fila)
+
+    df_asignaciones = pd.DataFrame(asignaciones, columns = columnas_tabla_asignaciones) 
+    writer = ExcelWriter("resultados/asignaciones.xlsx")
+    df_asignaciones.to_excel(excel_writer=writer, sheet_name="asignaciones", index=False)
+    writer.close()
+
+    # Compra viviendas: Analisis diario(Cuantas viviendas de cada tipo se compran cada día)
+    viviendas_compradas = []
+    columnas_viv_compradas = ["Dia", "Vivienda1", "Vivienda2", "Vivienda3", "Vivienda4", 
+                            "Viviendas Totales", "Gasto Diario"]
+    for t in range(1, max(t_max, int(R.x)) + 1): # itera entre los dias hasta que se asignan todas las familias
+        fila = [t]
+        for j in J:
+            compra_diaria_j = quicksum(x[i, j, t].x for i in N)
+            fila.append(compra_diaria_j)
+        fila.append(fila[1] + fila[2] + fila[3] + fila[4]) # viviendas totales encargadas ese dia
+        fila.append(fila[1]*c[1] + fila[2]*c[2] + fila[3]*c[3] + fila[4]*c[4]) # costo de viviendas compradas ese día
+        viviendas_compradas.append(fila)
+
+    df_viviendas_compradas = pd.DataFrame(viviendas_compradas, columns = columnas_viv_compradas) 
+    writer = ExcelWriter("resultados/viviendascompradas.xlsx")
+    df_viviendas_compradas.to_excel(excel_writer=writer, sheet_name="viviendascompradas", index = False)
+    writer.close()
 
 
 # print("___familia, vivienda, día___")

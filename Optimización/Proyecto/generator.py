@@ -13,7 +13,7 @@ for t in range(4000):
     test += ";" + ";".join(map(str, numbers))
     preferencias.append(test)
 
-folder_name = "./results"
+folder_name = "./data"
 # Descomentar si la carpeta no existe
 # os.mkdir(folder_name)
 with open(folder_name+"/preferencias.csv", "w") as pf:
@@ -44,7 +44,7 @@ for t in range(4000):
     test += ";" + ";".join(map(str, numbers))
     tiempos.append(test)
 
-folder_name = "./results"
+folder_name = "./data"
 with open(folder_name+"/tiemposviviendas.csv", "w") as tv:
     escribir = "Familia;Vivienda1;Vivienda2;Vivienda3;Vivienda4\n"+"\n".join(tiempos)
     tv.write(escribir)
@@ -66,7 +66,7 @@ for t in range(max_tiempo):
     test += ";" + numbers
     recursos.append(test)
 
-folder_name = "./results"
+folder_name = "./data"
 with open(folder_name+"/recursos.csv", "w") as rs:
     escribir = "Tiempo;Recursos\n"+"\n".join(recursos)
     rs.write(escribir)
@@ -84,7 +84,7 @@ for t in range(4):
     test = str(t + 1) + ";" + str(rec_viv[t]) + ";" + str(cost_viv[t])
     info.append(test)
 
-folder_name = "./results"
+folder_name = "./data"
 with open(folder_name+"/detallesvivienda.csv", "w") as dv:
     escribir = "Vivienda;Recursos;Costos\n"+"\n".join(info)
     dv.write(escribir)
