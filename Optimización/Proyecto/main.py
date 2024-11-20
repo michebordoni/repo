@@ -10,7 +10,7 @@ preferencias = pd.read_csv('data/preferencias.csv', sep=';')
 tiempos_viviendas = pd.read_csv('data/tiemposviviendas.csv', sep=';')
 # PARAMETROS para construcción conjunto:
 
-cant_familias = 20
+cant_familias = 50
 t_max = 365
 
 # CONJUNTOS
@@ -22,7 +22,7 @@ T = [(t + 1) for t in range(t_max)] # Horizonte de tiempo [1, t_max]
 # - Dependientes de conjuntos
 
 # r_t: cant max de recursos diarios disponibles
-r = {row['Tiempo']: row['Recursos'] for index, row in recursos.iterrows()}
+r = {row['Tiempo']: round(row['Recursos']) for index, row in recursos.iterrows()}
 # v_j: recursos para construir vivienda tipo j
 v = {row['Vivienda']: row['Recursos'] for index, row in detalle_vivienda.iterrows()}
 # c_j: costo de construir vivienda j
@@ -49,7 +49,7 @@ for index, row in preferencias.iterrows():
 m = {j: 12 if j == 1 else 0 for j in range(1, 5)}
 
 # - Independientes de conjuntos
-S = round(770 * (cant_familias / 1200)) # S: cantidad maxima de instalaciones simultaneas
+S = round((770 * (cant_familias / 1200))) # S: cantidad maxima de instalaciones simultaneas
 P = 326100000 # P: presupuesto total disponible
 M = t_max * 1000 # numero grande auxiliar en restriccion para definir R
 
@@ -106,16 +106,19 @@ model.addConstrs( (R >= t - M*(1- y[i, j, t]) for i in N for j in J for t in T),
 #Restricción extra para que el modelo indique soluciones lógicas
 model.addConstrs( (R >= t - M*(1- x[i, j, t]) for i in N for j in J for t in T), name="RFinal2") 
 
-# Definicón de no negatividad para inventario y producción de viviendas
+# Definición de no negatividad para inventario y producción de viviendas
 model.addConstrs( (I[j, t] >= 0 for j in J for t in T), "RN1")
 model.addConstrs( (u[j, t] >= 0 for j in J for t in T), "RN2")
+
+
+model.addConstr(quicksum(I[j, t] for j in J for t in T) == cant_familias, "R71")
 
 # FUNCION OBJETIVO
 objetivo = R
 model.setObjective(objetivo, GRB.MINIMIZE)
 model.optimize()
 
-print("Formato de solución:")
+print("\nFormato de solución:")
 print("¿Cómo quiere ver la solución?")
 print("[1] Solamente mediante consola")
 print("[2] Solamente mediante excel")
@@ -136,10 +139,14 @@ if int(method) in [1, 3]:
     print(f"GAP: {model.MIPGap}")
     print(f"tiempo solución: {model.Runtime} segundos")
 
+    print(f"S: {S}")
+
     print("Detalles de la solución:")
     print("-"*50)
     no_activity_start = -1
     no_activity_final = -1
+    total_assingns = 0
+    nothing = False
     for t in T:
         tr1 = 0
         tr2 = 0
@@ -149,15 +156,30 @@ if int(method) in [1, 3]:
             for i in N:
                 if x[i, j, t].x > 0:
                     familias.append([i, j])
-                if x[i, j, t].x > 0:
                     tr1 += 1
+                    total_assingns += 1
                 if y[i, j, t].x > 0:
                     tr2 += 1
+        # if tr1 > 0:
+            # print(f"asignaciones: {tr1}")
         tr1 += sum(transacciones)
+        # print(f"Inventario diario: {quicksum(I[j, t].x for j in J)}")
+        if tr1 + tr2 > 0 and nothing:
+            nothing = False
+            if no_activity_start == t - 1:
+                print(f"Día {no_activity_start} sin actividad")
+            else:
+                print(f"Días {no_activity_start} - {t - 1} sin actividad")
+            no_activity_start = -1
         if tr1 + tr2 == 0:
-            no_activity_final = t - 1
-            print(f"Días {no_activity_start} - {no_activity_final} sin nueva información, solo construcciones")
-            break
+            if no_activity_start != -1 and total_assingns == cant_familias:
+                no_activity_final = t - 1
+                print(f"Días {no_activity_start} - {no_activity_final} sin nueva información, solo construcciones")
+                break
+            if total_assingns < cant_familias:
+                if no_activity_start == -1:
+                    no_activity_start = t
+                    nothing = True
         elif tr1 == 0 and tr2 > 0:
             if no_activity_start == -1:
                 no_activity_start = t
@@ -200,8 +222,9 @@ if int(method) in [1, 3]:
                 for info in familias:
                     print(f"\t\tFamilia {info[0]} es asignada vivienda {info[1]}")
                 if len(familias) == 0:
-                    print("\tSe están realizando construcciones, sin información nueva que reportar")
+                    print("\t\tSe están realizando construcciones, sin información nueva que reportar")
                 print("-"*50)
+    # print(f"Inventario final: {quicksum(I[j, T[-1]].x for j in J)}")
     print("\n")
     print("-"*50)
     print("El resto de días no hay actividad, todas las familias tienen vivienda")
@@ -231,7 +254,7 @@ if int(method) in [2, 3]:
     for t in range(1, max(t_max, int(R.x)) + 1): # itera entre los dias hasta que se asignan todas las familias
         fila = [t]
         for j in J:
-            compra_diaria_j = quicksum(x[i, j, t].x for i in N)
+            compra_diaria_j = u[j, t].x
             fila.append(compra_diaria_j)
         fila.append(fila[1] + fila[2] + fila[3] + fila[4]) # viviendas totales encargadas ese dia
         fila.append(fila[1]*c[1] + fila[2]*c[2] + fila[3]*c[3] + fila[4]*c[4]) # costo de viviendas compradas ese día
